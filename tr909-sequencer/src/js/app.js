@@ -557,13 +557,14 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 document.getElementById('btn-load').addEventListener('click', async () => {
   if (window.electronAPI) {
     const data = await window.electronAPI.loadPattern();
-    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); updateLCD('PATTERN LOADED'); }
+    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); refreshBankButtons(); updateLCD('PATTERN LOADED'); }
   }
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
-  engine.clearPattern();
+  engine.clearAllPatterns();
   refreshGrid();
+  refreshAllKnobs();
   presetSelect.value = '';
   refreshBankButtons();
   updateLCD('ALL PATTERNS CLEARED');
