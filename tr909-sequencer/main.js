@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -15,7 +15,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      enableBlinkFeatures: 'WebMIDI'
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     title: 'TR-909 Rhythm Composer'
@@ -28,7 +29,17 @@ function createWindow() {
   // mainWindow.webContents.openDevTools();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'midi' || permission === 'midiSysex') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

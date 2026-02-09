@@ -26,6 +26,101 @@ const stopBtn = document.getElementById('btn-stop');
 const presetSelect = document.getElementById('preset-select');
 const delaySyncSelect = document.getElementById('delay-sync');
 
+// ─── MIDI Input (USB / USB‑C controllers) ─────────────────────
+
+const MIDI_NOTE_TO_INST = {
+  36: 'bd',   // Kick
+  38: 'sd',   // Snare
+  41: 'lt',   // Low tom
+  45: 'mt',   // Mid tom
+  48: 'ht',   // High tom
+  37: 'rim',  // Rim shot
+  39: 'clap', // Clap
+  42: 'chh',  // Closed hat
+  46: 'ohh',  // Open hat
+  49: 'crash',// Crash
+  51: 'ride', // Ride
+};
+
+let midiAccess = null;
+let midiReady = false;
+
+async function initMIDI() {
+  if (midiReady) return true;
+  if (!navigator.requestMIDIAccess) {
+    console.warn('[909] Web MIDI API not available in this runtime');
+    return false;
+  }
+
+  try {
+    midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    midiReady = true;
+    bindMIDIInputs();
+    midiAccess.onstatechange = () => {
+      bindMIDIInputs();
+      showMIDIStatus();
+    };
+    showMIDIStatus();
+    console.log('[909] MIDI initialized');
+    return true;
+  } catch (err) {
+    console.error('[909] MIDI init failed:', err);
+    updateLCD('MIDI ACCESS DENIED');
+    return false;
+  }
+}
+
+function bindMIDIInputs() {
+  if (!midiAccess) return;
+  for (const input of midiAccess.inputs.values()) {
+    input.onmidimessage = onMIDIMessage;
+  }
+}
+
+function showMIDIStatus() {
+  if (!midiAccess) return;
+  const inputs = [...midiAccess.inputs.values()].filter(i => i.state === 'connected');
+  if (inputs.length === 0) return;
+  updateLCD(`MIDI READY: ${inputs.length} INPUT${inputs.length > 1 ? 'S' : ''}`);
+}
+
+async function onMIDIMessage(event) {
+  const [status, data1, data2] = event.data;
+
+  // MIDI realtime transport messages
+  if (status === 0xFA || status === 0xFB) {
+    await initAudio();
+    if (!engine.isPlaying) {
+      engine.start();
+      playBtn.classList.add('playing');
+      updateLCD('MIDI START');
+    }
+    return;
+  }
+  if (status === 0xFC) {
+    if (engine.isPlaying) {
+      engine.stop();
+      playBtn.classList.remove('playing');
+      updateLCD('MIDI STOP');
+    }
+    return;
+  }
+
+  const type = status & 0xF0;
+  const isNoteOn = type === 0x90 && data2 > 0;
+  if (!isNoteOn) return;
+
+  const instId = MIDI_NOTE_TO_INST[data1];
+  if (!instId) return;
+
+  await initAudio();
+  const inst = engine.instruments[instId];
+  if (!inst || !inst.buffer) return;
+
+  const velocity = data2 >= 100 ? 2 : 1;
+  engine._triggerSample(inst, engine.audioContext.currentTime, velocity);
+}
+
 // ─── Build Instrument Grid ────────────────────────────────────
 
 function buildGrid() {
@@ -246,6 +341,7 @@ engine.onStop = () => {
 
 playBtn.addEventListener('click', async () => {
   await initAudio();
+  await initMIDI();
   if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
   else { engine.start(); playBtn.classList.add('playing'); }
 });
@@ -256,6 +352,7 @@ document.addEventListener('keydown', async (e) => {
   if (e.code === 'Space' && !e.repeat) {
     e.preventDefault();
     await initAudio();
+    await initMIDI();
     if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
     else { engine.start(); playBtn.classList.add('playing'); }
   }
@@ -1247,4 +1344,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateLCD('TR-909 v2  |  PRESS SPACE');
   refreshBankButtons();
+  initMIDI();
 });
