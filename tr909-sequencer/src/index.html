@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TR-909 Rhythm Composer</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sequencer">
+
+  <!-- ─── Header ──────────────────────────────────────── -->
+  <div class="header">
+    <div class="header-brand">
+      <span class="logo">Roland</span>
+      <span class="model">TR-909</span>
+      <span class="subtitle">Rhythm Composer</span>
+    </div>
+    <div class="header-actions">
+      <button class="header-btn" id="btn-load-samples">SAMPLES</button>
+      <button class="header-btn" id="btn-save">SAVE</button>
+      <button class="header-btn" id="btn-load">LOAD</button>
+      <button class="header-btn" id="btn-clear">CLEAR</button>
+      <button class="header-btn export-btn" id="btn-export">⏬ EXPORT WAV</button>
+    </div>
+  </div>
+
+  <!-- ─── Controls Row ────────────────────────────────── -->
+  <div class="controls-panel">
+
+    <!-- Master -->
+    <div class="control-section">
+      <div class="control-group">
+        <label>Tempo</label>
+        <div class="knob" id="knob-tempo" data-param="tempo" data-min="30" data-max="300" data-value="120"></div>
+        <div class="knob-value" id="val-tempo">120</div>
+      </div>
+      <div class="control-group">
+        <label>Shuffle</label>
+        <div class="knob" id="knob-swing" data-param="swing" data-min="0" data-max="80" data-value="0"></div>
+        <div class="knob-value" id="val-swing">0</div>
+      </div>
+      <div class="control-group">
+        <label>Volume</label>
+        <div class="knob" id="knob-volume" data-param="volume" data-min="0" data-max="100" data-value="80"></div>
+        <div class="knob-value" id="val-volume">80</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Reverb Master -->
+    <div class="control-section">
+      <div class="control-group">
+        <div class="section-label reverb">REVERB</div>
+      </div>
+      <div class="control-group">
+        <label>Decay</label>
+        <div class="knob" id="knob-rev-decay" data-param="rev-decay" data-min="5" data-max="60" data-value="20"></div>
+        <div class="knob-value" id="val-rev-decay">2.0s</div>
+      </div>
+      <div class="control-group">
+        <label>Level</label>
+        <div class="knob" id="knob-rev-wet" data-param="rev-wet" data-min="0" data-max="100" data-value="50"></div>
+        <div class="knob-value" id="val-rev-wet">50</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Delay Master -->
+    <div class="control-section">
+      <div class="control-group">
+        <div class="section-label delay">DELAY</div>
+      </div>
+      <div class="control-group">
+        <label>Time</label>
+        <div class="knob" id="knob-dly-time" data-param="dly-time" data-min="50" data-max="1000" data-value="375"></div>
+        <div class="knob-value" id="val-dly-time">375ms</div>
+      </div>
+      <div class="control-group">
+        <label>Fdbk</label>
+        <div class="knob" id="knob-dly-fb" data-param="dly-fb" data-min="0" data-max="85" data-value="35"></div>
+        <div class="knob-value" id="val-dly-fb">35</div>
+      </div>
+      <div class="control-group">
+        <label>Level</label>
+        <div class="knob" id="knob-dly-wet" data-param="dly-wet" data-min="0" data-max="100" data-value="40"></div>
+        <div class="knob-value" id="val-dly-wet">40</div>
+      </div>
+      <div class="control-group">
+        <label>Sync</label>
+        <select class="delay-sync-select" id="delay-sync">
+          <option value="">FREE</option>
+          <option value="1/4">1/4</option>
+          <option value="1/8" selected>1/8</option>
+          <option value="1/8d">1/8d</option>
+          <option value="1/16">1/16</option>
+          <option value="1/8t">1/8t</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Preset -->
+    <div class="control-group">
+      <label>Pattern</label>
+      <select class="preset-select" id="preset-select">
+        <option value="">-- Empty --</option>
+        <option value="classic-909">Classic 909</option>
+        <option value="house">House</option>
+        <option value="breakbeat">Breakbeat</option>
+        <option value="techno">Techno</option>
+        <option value="dub-techno">Dub Techno</option>
+      </select>
+    </div>
+
+    <div class="spacer"></div>
+
+    <!-- Transport -->
+    <div class="transport">
+      <button class="transport-btn" id="btn-play"><span>▶</span><span>PLAY</span></button>
+      <button class="transport-btn" id="btn-stop"><span>■</span><span>STOP</span></button>
+    </div>
+  </div>
+
+  <!-- ─── Pattern Bank Bar ──────────────────────────────── -->
+  <div class="pattern-bank-bar" id="pattern-bank-bar">
+    <div class="bank-section">
+      <span class="bank-label">PATTERN</span>
+      <div class="bank-slots" id="bank-slots">
+        <button class="bank-btn active" data-index="0">A</button>
+        <button class="bank-btn" data-index="1">B</button>
+        <button class="bank-btn" data-index="2">C</button>
+        <button class="bank-btn" data-index="3">D</button>
+        <button class="bank-btn" data-index="4">E</button>
+        <button class="bank-btn" data-index="5">F</button>
+        <button class="bank-btn" data-index="6">G</button>
+        <button class="bank-btn" data-index="7">H</button>
+      </div>
+    </div>
+    <div class="bank-divider"></div>
+    <div class="bank-section">
+      <span class="bank-label">EDIT</span>
+      <button class="bank-action-btn" id="btn-copy" title="Copy current pattern">COPY</button>
+      <button class="bank-action-btn" id="btn-paste" title="Paste into current pattern">PASTE</button>
+    </div>
+    <div class="bank-divider"></div>
+    <div class="bank-section">
+      <span class="bank-label">CHAIN</span>
+      <button class="bank-action-btn chain-toggle" id="btn-chain-toggle" title="Toggle chain playback mode">OFF</button>
+      <button class="bank-action-btn" id="btn-chain-edit" title="Open chain editor">EDIT</button>
+    </div>
+    <div class="bank-spacer"></div>
+    <div class="bank-section">
+      <span class="bank-status" id="bank-status">PAT A</span>
+    </div>
+  </div>
+
+  <!-- ─── Chain Editor Overlay ─────────────────────────── -->
+  <div class="chain-overlay" id="chain-overlay">
+    <div class="chain-panel">
+      <h3>Chain Editor</h3>
+      <p class="chain-hint">Click pattern buttons below to build a chain. Patterns play left-to-right, then loop.</p>
+
+      <div class="chain-add-row" id="chain-add-row">
+        <span class="chain-add-label">ADD:</span>
+        <button class="chain-add-btn" data-index="0">A</button>
+        <button class="chain-add-btn" data-index="1">B</button>
+        <button class="chain-add-btn" data-index="2">C</button>
+        <button class="chain-add-btn" data-index="3">D</button>
+        <button class="chain-add-btn" data-index="4">E</button>
+        <button class="chain-add-btn" data-index="5">F</button>
+        <button class="chain-add-btn" data-index="6">G</button>
+        <button class="chain-add-btn" data-index="7">H</button>
+      </div>
+
+      <div class="chain-sequence-label">SEQUENCE:</div>
+      <div class="chain-sequence" id="chain-sequence">
+        <div class="chain-empty">— empty —</div>
+      </div>
+
+      <div class="chain-actions">
+        <button class="header-btn" id="btn-chain-clear">CLEAR CHAIN</button>
+        <button class="header-btn" id="btn-chain-close">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Export WAV Overlay ──────────────────────────── -->
+  <div class="export-overlay" id="export-overlay">
+    <div class="export-panel">
+      <h3>Export WAV</h3>
+
+      <div class="export-options">
+        <div class="export-row">
+          <label class="export-label">SOURCE</label>
+          <div class="export-toggle" id="export-mode">
+            <button class="export-toggle-btn active" data-value="pattern">CURRENT PATTERN</button>
+            <button class="export-toggle-btn" data-value="chain">FULL CHAIN</button>
+          </div>
+        </div>
+
+        <div class="export-row">
+          <label class="export-label">LOOPS</label>
+          <div class="export-loops">
+            <button class="export-loop-btn" data-delta="-1">−</button>
+            <span class="export-loop-val" id="export-loops-val">2</span>
+            <button class="export-loop-btn" data-delta="1">+</button>
+          </div>
+          <span class="export-hint" id="export-duration-hint">≈ 4.0s</span>
+        </div>
+
+        <div class="export-row">
+          <label class="export-label">REVERB TAIL</label>
+          <div class="export-loops">
+            <button class="export-tail-btn" data-delta="-0.5">−</button>
+            <span class="export-loop-val" id="export-tail-val">2.0s</span>
+            <button class="export-tail-btn" data-delta="0.5">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-progress-wrap" id="export-progress-wrap">
+        <div class="export-progress-bar">
+          <div class="export-progress-fill" id="export-progress-fill"></div>
+        </div>
+        <span class="export-progress-text" id="export-progress-text">RENDERING…</span>
+      </div>
+
+      <div class="export-actions">
+        <button class="header-btn export-go-btn" id="btn-export-go">RENDER & DOWNLOAD</button>
+        <button class="header-btn" id="btn-export-close">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Step Number Labels ──────────────────────────── -->
+  <div class="step-numbers">
+    <div class="step-group"><span class="step-num">1</span><span class="step-num">2</span><span class="step-num">3</span><span class="step-num">4</span></div>
+    <div class="step-group"><span class="step-num">5</span><span class="step-num">6</span><span class="step-num">7</span><span class="step-num">8</span></div>
+    <div class="step-group"><span class="step-num">9</span><span class="step-num">10</span><span class="step-num">11</span><span class="step-num">12</span></div>
+    <div class="step-group"><span class="step-num">13</span><span class="step-num">14</span><span class="step-num">15</span><span class="step-num">16</span></div>
+  </div>
+
+  <!-- ─── Instrument Grid ─────────────────────────────── -->
+  <div class="instrument-grid" id="instrument-grid"></div>
+
+  <!-- ─── Footer ──────────────────────────────────────── -->
+  <div class="footer">
+    <div class="footer-info">CLICK = ON/ACCENT/OFF &nbsp;|&nbsp; SPACE = PLAY/STOP &nbsp;|&nbsp; DROP SAMPLES ON ROWS</div>
+    <div class="lcd-display" id="lcd-display">TR-909 READY</div>
+    <div class="footer-info">1-8 = PATTERNS &nbsp;|&nbsp; C = COPY &nbsp;|&nbsp; V = PASTE</div>
+  </div>
+</div>
+
+<!-- ─── Sample Load Overlay ─────────────────────────────── -->
+<div class="sample-overlay" id="sample-overlay">
+  <div class="sample-panel">
+    <h3>Load Samples</h3>
+    <p style="font-size:11px;color:#666;margin-bottom:12px;">Click an instrument to load a .wav/.mp3 sample, or load a full kit folder.</p>
+    <button class="header-btn" id="btn-load-kit" style="margin-bottom:12px;">LOAD KIT FOLDER</button>
+    <div id="sample-slots"></div>
+    <br>
+    <button class="header-btn" id="btn-close-samples">CLOSE</button>
+  </div>
+</div>
+
+<script src="js/sequencer-engine.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Global drag overlay -->
+<div class="drop-zone-overlay" id="drop-zone-overlay"></div>
+
+</body>
+</html>

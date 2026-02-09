@@ -1,0 +1,31 @@
+{
+  "name": "tr909-sequencer",
+  "version": "1.0.0",
+  "description": "Roland TR-909 Style Drum Sequencer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "pack": "electron-builder --dir"
+  },
+  "author": "Mike",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.tr909.sequencer",
+    "productName": "TR-909 Sequencer",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "samples/**/*"
+    ]
+  }
+}
