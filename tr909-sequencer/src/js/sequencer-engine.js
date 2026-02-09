@@ -831,10 +831,11 @@ class SequencerEngine {
         return s;
       }),
       chain: [...this.chain],
+      sessionVersion: 1,
       instruments: {}
     };
     for (const [id, inst] of Object.entries(this.instruments)) {
-      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed };
+      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed, sampleName: inst.sampleName || inst._sampleName || null, samplePath: inst.samplePath || inst._samplePath || null };
     }
     return data;
   }

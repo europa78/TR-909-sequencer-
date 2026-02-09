@@ -517,7 +517,8 @@ document.getElementById('btn-load-kit').addEventListener('click', async () => {
     for (const [instId, keys] of Object.entries(keywords)) {
       if (keys.some(k => lower.includes(k))) {
         const buf = file.buffer.buffer.slice(file.buffer.byteOffset, file.buffer.byteOffset + file.buffer.byteLength);
-        await engine.loadSample(instId, buf);
+        const loaded = await engine.loadSample(instId, buf);
+        if (loaded) setInstrumentSampleMeta(instId, file.name, file.path);
         break;
       }
     }
@@ -544,7 +545,7 @@ function buildSampleSlots() {
         drawWaveform(id);
         const nameEl = document.querySelector(`.wf-name[data-inst="${id}"]`);
         if (nameEl) nameEl.textContent = file.name;
-        engine.instruments[id]._sampleName = file.name;
+        setInstrumentSampleMeta(id, file.name, file.path);
         updateLCD(`${inst.shortName}: ${file.name}`);
       }
     });
@@ -557,14 +558,14 @@ function buildSampleSlots() {
 document.getElementById('btn-save').addEventListener('click', async () => {
   if (window.electronAPI) {
     const saved = await window.electronAPI.savePattern(engine.serialize());
-    if (saved) updateLCD('PATTERN SAVED');
+    if (saved) updateLCD('SESSION SAVED');
   }
 });
 
 document.getElementById('btn-load').addEventListener('click', async () => {
   if (window.electronAPI) {
     const data = await window.electronAPI.loadPattern();
-    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); refreshBankButtons(); updateLCD('PATTERN LOADED'); }
+    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); refreshBankButtons(); const missing = await restoreSessionSamples(data); updateLCD(missing.length > 0 ? `SESSION LOADED (missing: ${missing.join(', ')})` : 'SESSION LOADED'); }
   }
 });
 
@@ -588,6 +589,45 @@ async function previewInstrument(instId) {
 // ─── LCD ──────────────────────────────────────────────────────
 
 function updateLCD(text) { lcdDisplay.textContent = text; }
+
+function setInstrumentSampleMeta(instId, sampleName, samplePath = null) {
+  const inst = engine.instruments[instId];
+  if (!inst) return;
+  inst._sampleName = sampleName || null;
+  inst._samplePath = samplePath || null;
+  inst.sampleName = sampleName || null;
+  inst.samplePath = samplePath || null;
+}
+
+async function restoreSessionSamples(sessionData) {
+  if (!window.electronAPI || !sessionData || !sessionData.instruments) return [];
+
+  const failed = [];
+  for (const [instId, data] of Object.entries(sessionData.instruments)) {
+    if (!engine.instruments[instId]) continue;
+    if (!data || !data.samplePath) continue;
+
+    const file = await window.electronAPI.loadSamplePath(data.samplePath);
+    if (!file) {
+      failed.push(instId.toUpperCase());
+      continue;
+    }
+
+    const buf = file.buffer.buffer.slice(file.buffer.byteOffset, file.buffer.byteOffset + file.buffer.byteLength);
+    const success = await engine.loadSample(instId, buf);
+    if (!success) {
+      failed.push(instId.toUpperCase());
+      continue;
+    }
+
+    setInstrumentSampleMeta(instId, file.name, file.path);
+    const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
+    if (nameEl) nameEl.textContent = file.name;
+    drawWaveform(instId);
+  }
+
+  return failed;
+}
 
 // ─── Synthesized Fallback Samples ─────────────────────────────
 
@@ -798,7 +838,7 @@ async function handleDroppedFile(instId, file) {
 
     if (success) {
       // Store the filename for display
-      inst._sampleName = file.name;
+      setInstrumentSampleMeta(instId, file.name, file.path || null);
 
       // Update waveform
       drawWaveform(instId);
@@ -833,7 +873,7 @@ async function loadSampleForInstrument(instId) {
       const success = await engine.loadSample(instId, buf);
       if (success) {
         const inst = engine.instruments[instId];
-        inst._sampleName = file.name;
+        setInstrumentSampleMeta(instId, file.name, file.path || null);
         drawWaveform(instId);
         const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
         if (nameEl) nameEl.textContent = file.name;

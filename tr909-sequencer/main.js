@@ -77,6 +77,23 @@ ipcMain.handle('load-sample-file', async () => {
   };
 });
 
+
+// Load sample file by absolute path (used for session restore)
+ipcMain.handle('load-sample-path', async (event, samplePath) => {
+  if (!samplePath) return null;
+  try {
+    if (!fs.existsSync(samplePath)) return null;
+    return {
+      name: path.basename(samplePath),
+      path: samplePath,
+      buffer: fs.readFileSync(samplePath)
+    };
+  } catch (err) {
+    console.error('[909] Failed to load sample path:', samplePath, err);
+    return null;
+  }
+});
+
 // Save pattern to JSON
 ipcMain.handle('save-pattern', async (event, patternData) => {
   const result = await dialog.showSaveDialog(mainWindow, {
