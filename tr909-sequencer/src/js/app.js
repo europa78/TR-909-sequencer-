@@ -45,7 +45,14 @@ function buildGrid() {
     const label = document.createElement('div');
     label.className = 'inst-label';
     label.innerHTML = `<span class="inst-color" style="background:${inst.color}"></span><span class="inst-name" style="color:${inst.color}">${inst.shortName}</span>`;
-    label.addEventListener('click', () => previewInstrument(instId));
+    label.title = `${inst.shortName}: click to load sample, Shift+click to preview`;
+    label.addEventListener('click', async (e) => {
+      if (e.shiftKey) {
+        await previewInstrument(instId);
+        return;
+      }
+      await loadSampleForInstrument(instId);
+    });
     row.appendChild(label);
 
     // ── Waveform Display ──
