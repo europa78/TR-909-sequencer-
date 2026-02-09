@@ -25,6 +25,8 @@ const playBtn = document.getElementById('btn-play');
 const stopBtn = document.getElementById('btn-stop');
 const presetSelect = document.getElementById('preset-select');
 const delaySyncSelect = document.getElementById('delay-sync');
+const midiInIndicator = document.getElementById('midi-in-indicator');
+const midiOutIndicator = document.getElementById('midi-out-indicator');
 
 // ─── MIDI Input (USB / USB‑C controllers) ─────────────────────
 
@@ -44,6 +46,10 @@ const MIDI_NOTE_TO_INST = {
 
 let midiAccess = null;
 let midiReady = false;
+let midiInFlashTimer = null;
+let midiOutFlashTimer = null;
+
+const INST_TO_MIDI_NOTE = Object.fromEntries(Object.entries(MIDI_NOTE_TO_INST).map(([note, inst]) => [inst, Number(note)]));
 
 async function initMIDI() {
   if (midiReady) return true;
@@ -70,6 +76,49 @@ async function initMIDI() {
   }
 }
 
+
+function setMIDIIndicator(el, { enabled = false, connected = false, text = '' } = {}) {
+  if (!el) return;
+  el.classList.toggle('enabled', enabled);
+  el.classList.toggle('connected', connected);
+  if (text) el.textContent = text;
+}
+
+function flashMIDIIndicator(el, direction) {
+  if (!el) return;
+  el.classList.add('activity');
+  if (direction === 'in') {
+    clearTimeout(midiInFlashTimer);
+    midiInFlashTimer = setTimeout(() => el.classList.remove('activity'), 120);
+  } else {
+    clearTimeout(midiOutFlashTimer);
+    midiOutFlashTimer = setTimeout(() => el.classList.remove('activity'), 120);
+  }
+}
+
+function sendMIDIToOutputs(bytes) {
+  if (!midiAccess) return;
+  let sent = false;
+  for (const output of midiAccess.outputs.values()) {
+    if (output.state !== 'connected') continue;
+    output.send(bytes);
+    sent = true;
+  }
+  if (sent) flashMIDIIndicator(midiOutIndicator, 'out');
+}
+
+function sendMIDINoteOut(instId, velocity = 100) {
+  const note = INST_TO_MIDI_NOTE[instId];
+  if (note === undefined) return;
+  const vel = Math.max(1, Math.min(127, Math.round(velocity)));
+  sendMIDIToOutputs([0x90, note, vel]);
+  setTimeout(() => sendMIDIToOutputs([0x80, note, 0]), 80);
+}
+
+function sendMIDITransport(statusByte) {
+  sendMIDIToOutputs([statusByte]);
+}
+
 function bindMIDIInputs() {
   if (!midiAccess) return;
   for (const input of midiAccess.inputs.values()) {
@@ -78,13 +127,28 @@ function bindMIDIInputs() {
 }
 
 function showMIDIStatus() {
-  if (!midiAccess) return;
-  const inputs = [...midiAccess.inputs.values()].filter(i => i.state === 'connected');
-  if (inputs.length === 0) return;
-  updateLCD(`MIDI READY: ${inputs.length} INPUT${inputs.length > 1 ? 'S' : ''}`);
+  const enabled = !!midiAccess;
+  const inputs = enabled ? [...midiAccess.inputs.values()].filter(i => i.state === 'connected') : [];
+  const outputs = enabled ? [...midiAccess.outputs.values()].filter(o => o.state === 'connected') : [];
+
+  setMIDIIndicator(midiInIndicator, {
+    enabled,
+    connected: inputs.length > 0,
+    text: inputs.length > 0 ? `MIDI IN ${inputs.length}` : 'MIDI IN'
+  });
+  setMIDIIndicator(midiOutIndicator, {
+    enabled,
+    connected: outputs.length > 0,
+    text: outputs.length > 0 ? `MIDI OUT ${outputs.length}` : 'MIDI OUT'
+  });
+
+  if (inputs.length > 0 || outputs.length > 0) {
+    updateLCD(`MIDI I/O ${inputs.length}/${outputs.length}`);
+  }
 }
 
 async function onMIDIMessage(event) {
+  flashMIDIIndicator(midiInIndicator, 'in');
   const [status, data1, data2] = event.data;
 
   // MIDI realtime transport messages
@@ -119,6 +183,7 @@ async function onMIDIMessage(event) {
 
   const velocity = data2 >= 100 ? 2 : 1;
   engine._triggerSample(inst, engine.audioContext.currentTime, velocity);
+  sendMIDINoteOut(instId, data2);
 }
 
 // ─── Build Instrument Grid ────────────────────────────────────
@@ -342,19 +407,19 @@ engine.onStop = () => {
 playBtn.addEventListener('click', async () => {
   await initAudio();
   await initMIDI();
-  if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
-  else { engine.start(); playBtn.classList.add('playing'); }
+  if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); }
+  else { engine.start(); playBtn.classList.add('playing'); sendMIDITransport(0xFA); }
 });
 
-stopBtn.addEventListener('click', () => { engine.stop(); playBtn.classList.remove('playing'); });
+stopBtn.addEventListener('click', () => { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); });
 
 document.addEventListener('keydown', async (e) => {
   if (e.code === 'Space' && !e.repeat) {
     e.preventDefault();
     await initAudio();
     await initMIDI();
-    if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
-    else { engine.start(); playBtn.classList.add('playing'); }
+    if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); }
+    else { engine.start(); playBtn.classList.add('playing'); sendMIDITransport(0xFA); }
   }
 
   // Number keys 1-8 for pattern bank

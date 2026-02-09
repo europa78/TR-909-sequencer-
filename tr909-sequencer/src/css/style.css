@@ -140,8 +140,48 @@ body {
   font-family: 'Orbitron', sans-serif; font-weight: 700; min-width: 36px;
 }
 
+.midi-panel {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+.midi-indicator {
+  min-width: 72px;
+  height: 24px;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  background: #171717;
+  color: #676767;
+  font-size: 9px;
+  line-height: 24px;
+  text-align: center;
+  letter-spacing: 0.8px;
+  font-family: 'Share Tech Mono', monospace;
+  user-select: none;
+}
+
+.midi-indicator.enabled {
+  color: #b9b9b9;
+  border-color: #4b4b4b;
+}
+
+.midi-indicator.connected {
+  color: #b6ff9b;
+  border-color: #2d8c3a;
+  box-shadow: inset 0 0 6px rgba(100, 220, 100, 0.15);
+}
+
+.midi-indicator.activity {
+  background: #204a20;
+  color: #e7ffe0;
+  border-color: #40b158;
+  box-shadow: 0 0 8px rgba(64, 177, 88, 0.45);
+}
+
 /* Transport */
-.transport { display: flex; gap: 6px; margin-left: auto; align-items: flex-end; }
+.transport { display: flex; gap: 6px; align-items: flex-end; }
 
 .transport-btn {
   width: 50px; height: 40px; border: 2px solid var(--panel-dark); border-radius: 6px;
