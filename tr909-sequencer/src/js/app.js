@@ -717,17 +717,77 @@ function buildSampleSlots() {
 
 // ─── Save / Load / Clear ──────────────────────────────────────
 
-document.getElementById('btn-save').addEventListener('click', async () => {
+async function saveSessionToDisk(sessionData) {
   if (window.electronAPI) {
-    const saved = await window.electronAPI.savePattern(engine.serialize());
-    if (saved) updateLCD('SESSION SAVED');
+    const saved = await window.electronAPI.savePattern(sessionData);
+    return !!saved;
+  }
+
+  // Browser fallback: download JSON
+  const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tr909-session-${ts}.909`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+  return true;
+}
+
+async function loadSessionFromDisk() {
+  if (window.electronAPI) {
+    return await window.electronAPI.loadPattern();
+  }
+
+  // Browser fallback: choose local JSON file
+  return await new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.909,.json,application/json';
+    input.onchange = async (e) => {
+      try {
+        const file = e.target.files?.[0];
+        if (!file) return resolve(null);
+        const text = await file.text();
+        resolve(JSON.parse(text));
+      } catch (err) {
+        console.error('[909] Failed to parse session file:', err);
+        resolve(null);
+      }
+    };
+    input.click();
+  });
+}
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  try {
+    const saved = await saveSessionToDisk(engine.serialize());
+    updateLCD(saved ? 'SESSION SAVED' : 'SAVE CANCELED');
+  } catch (err) {
+    console.error('[909] Save failed:', err);
+    updateLCD('SAVE FAILED');
   }
 });
 
 document.getElementById('btn-load').addEventListener('click', async () => {
-  if (window.electronAPI) {
-    const data = await window.electronAPI.loadPattern();
-    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); refreshBankButtons(); const missing = await restoreSessionSamples(data); updateLCD(missing.length > 0 ? `SESSION LOADED (missing: ${missing.join(', ')})` : 'SESSION LOADED'); }
+  try {
+    const data = await loadSessionFromDisk();
+    if (!data) {
+      updateLCD('LOAD CANCELED');
+      return;
+    }
+
+    engine.deserialize(data);
+    refreshGrid();
+    refreshAllKnobs();
+    refreshBankButtons();
+    const missing = await restoreSessionSamples(data);
+    updateLCD(missing.length > 0 ? `SESSION LOADED (missing: ${missing.join(', ')})` : 'SESSION LOADED');
+  } catch (err) {
+    console.error('[909] Load failed:', err);
+    updateLCD('LOAD FAILED');
   }
 });
 
