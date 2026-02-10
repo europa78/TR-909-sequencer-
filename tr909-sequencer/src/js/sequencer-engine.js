@@ -284,7 +284,10 @@ class SequencerEngine {
   _scheduleStep(step, time) {
     if (this.onStepChange) {
       const delay = Math.max(0, (time - this.audioContext.currentTime) * 1000);
-      setTimeout(() => this.onStepChange(step), delay);
+      setTimeout(() => {
+        if (!this.isPlaying) return;
+        this.onStepChange(step);
+      }, delay);
     }
     const hasSolo = Object.values(this.instruments).some(i => i.soloed);
     for (const [id, inst] of Object.entries(this.instruments)) {
@@ -476,6 +479,18 @@ class SequencerEngine {
     if (instrumentId) { this.instruments[instrumentId].pattern.fill(0); }
     else { for (const inst of Object.values(this.instruments)) inst.pattern.fill(0); }
     this.saveToBank(this.activePatternIndex);
+  }
+
+  clearAllPatterns() {
+    for (let i = 0; i < this.patternBank.length; i++) {
+      this.patternBank[i] = this._createEmptyPatternSnapshot();
+    }
+    for (const inst of Object.values(this.instruments)) {
+      inst.pattern.fill(0);
+    }
+    this.activePatternIndex = 0;
+    this.pendingPatternIndex = -1;
+    this.clearChain();
   }
 
   // ─── Parameter Setters ─────────────────────────────────────
@@ -816,10 +831,11 @@ class SequencerEngine {
         return s;
       }),
       chain: [...this.chain],
+      sessionVersion: 1,
       instruments: {}
     };
     for (const [id, inst] of Object.entries(this.instruments)) {
-      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed };
+      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed, sampleName: inst.sampleName || inst._sampleName || null, samplePath: inst.samplePath || inst._samplePath || null };
     }
     return data;
   }
@@ -848,9 +864,9 @@ class SequencerEngine {
     // Restore chain
     if (data.chain) this.chain = [...data.chain];
 
-    // Restore active pattern
+    // Restore active pattern from the bank snapshot
     if (data.activePatternIndex !== undefined) {
-      this.activePatternIndex = data.activePatternIndex;
+      this.loadFromBank(data.activePatternIndex);
     }
 
     if (data.instruments) {

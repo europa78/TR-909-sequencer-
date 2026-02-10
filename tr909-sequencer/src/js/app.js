@@ -25,6 +25,166 @@ const playBtn = document.getElementById('btn-play');
 const stopBtn = document.getElementById('btn-stop');
 const presetSelect = document.getElementById('preset-select');
 const delaySyncSelect = document.getElementById('delay-sync');
+const midiInIndicator = document.getElementById('midi-in-indicator');
+const midiOutIndicator = document.getElementById('midi-out-indicator');
+
+// ─── MIDI Input (USB / USB‑C controllers) ─────────────────────
+
+const MIDI_NOTE_TO_INST = {
+  36: 'bd',   // Kick
+  38: 'sd',   // Snare
+  41: 'lt',   // Low tom
+  45: 'mt',   // Mid tom
+  48: 'ht',   // High tom
+  37: 'rim',  // Rim shot
+  39: 'clap', // Clap
+  42: 'chh',  // Closed hat
+  46: 'ohh',  // Open hat
+  49: 'crash',// Crash
+  51: 'ride', // Ride
+};
+
+let midiAccess = null;
+let midiReady = false;
+let midiInFlashTimer = null;
+let midiOutFlashTimer = null;
+
+const INST_TO_MIDI_NOTE = Object.fromEntries(Object.entries(MIDI_NOTE_TO_INST).map(([note, inst]) => [inst, Number(note)]));
+
+async function initMIDI() {
+  if (midiReady) return true;
+  if (!navigator.requestMIDIAccess) {
+    console.warn('[909] Web MIDI API not available in this runtime');
+    return false;
+  }
+
+  try {
+    midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    midiReady = true;
+    bindMIDIInputs();
+    midiAccess.onstatechange = () => {
+      bindMIDIInputs();
+      showMIDIStatus();
+    };
+    showMIDIStatus();
+    console.log('[909] MIDI initialized');
+    return true;
+  } catch (err) {
+    console.error('[909] MIDI init failed:', err);
+    updateLCD('MIDI ACCESS DENIED');
+    return false;
+  }
+}
+
+
+function setMIDIIndicator(el, { enabled = false, connected = false, text = '' } = {}) {
+  if (!el) return;
+  el.classList.toggle('enabled', enabled);
+  el.classList.toggle('connected', connected);
+  if (text) el.textContent = text;
+}
+
+function flashMIDIIndicator(el, direction) {
+  if (!el) return;
+  el.classList.add('activity');
+  if (direction === 'in') {
+    clearTimeout(midiInFlashTimer);
+    midiInFlashTimer = setTimeout(() => el.classList.remove('activity'), 120);
+  } else {
+    clearTimeout(midiOutFlashTimer);
+    midiOutFlashTimer = setTimeout(() => el.classList.remove('activity'), 120);
+  }
+}
+
+function sendMIDIToOutputs(bytes) {
+  if (!midiAccess) return;
+  let sent = false;
+  for (const output of midiAccess.outputs.values()) {
+    if (output.state !== 'connected') continue;
+    output.send(bytes);
+    sent = true;
+  }
+  if (sent) flashMIDIIndicator(midiOutIndicator, 'out');
+}
+
+function sendMIDINoteOut(instId, velocity = 100) {
+  const note = INST_TO_MIDI_NOTE[instId];
+  if (note === undefined) return;
+  const vel = Math.max(1, Math.min(127, Math.round(velocity)));
+  sendMIDIToOutputs([0x90, note, vel]);
+  setTimeout(() => sendMIDIToOutputs([0x80, note, 0]), 80);
+}
+
+function sendMIDITransport(statusByte) {
+  sendMIDIToOutputs([statusByte]);
+}
+
+function bindMIDIInputs() {
+  if (!midiAccess) return;
+  for (const input of midiAccess.inputs.values()) {
+    input.onmidimessage = onMIDIMessage;
+  }
+}
+
+function showMIDIStatus() {
+  const enabled = !!midiAccess;
+  const inputs = enabled ? [...midiAccess.inputs.values()].filter(i => i.state === 'connected') : [];
+  const outputs = enabled ? [...midiAccess.outputs.values()].filter(o => o.state === 'connected') : [];
+
+  setMIDIIndicator(midiInIndicator, {
+    enabled,
+    connected: inputs.length > 0,
+    text: inputs.length > 0 ? `MIDI IN ${inputs.length}` : 'MIDI IN'
+  });
+  setMIDIIndicator(midiOutIndicator, {
+    enabled,
+    connected: outputs.length > 0,
+    text: outputs.length > 0 ? `MIDI OUT ${outputs.length}` : 'MIDI OUT'
+  });
+
+  if (inputs.length > 0 || outputs.length > 0) {
+    updateLCD(`MIDI I/O ${inputs.length}/${outputs.length}`);
+  }
+}
+
+async function onMIDIMessage(event) {
+  flashMIDIIndicator(midiInIndicator, 'in');
+  const [status, data1, data2] = event.data;
+
+  // MIDI realtime transport messages
+  if (status === 0xFA || status === 0xFB) {
+    await initAudio();
+    if (!engine.isPlaying) {
+      engine.start();
+      playBtn.classList.add('playing');
+      updateLCD('MIDI START');
+    }
+    return;
+  }
+  if (status === 0xFC) {
+    if (engine.isPlaying) {
+      engine.stop();
+      playBtn.classList.remove('playing');
+      updateLCD('MIDI STOP');
+    }
+    return;
+  }
+
+  const type = status & 0xF0;
+  const isNoteOn = type === 0x90 && data2 > 0;
+  if (!isNoteOn) return;
+
+  const instId = MIDI_NOTE_TO_INST[data1];
+  if (!instId) return;
+
+  await initAudio();
+  const inst = engine.instruments[instId];
+  if (!inst || !inst.buffer) return;
+
+  const velocity = data2 >= 100 ? 2 : 1;
+  engine._triggerSample(inst, engine.audioContext.currentTime, velocity);
+  sendMIDINoteOut(instId, data2);
+}
 
 // ─── Build Instrument Grid ────────────────────────────────────
 
@@ -45,7 +205,14 @@ function buildGrid() {
     const label = document.createElement('div');
     label.className = 'inst-label';
     label.innerHTML = `<span class="inst-color" style="background:${inst.color}"></span><span class="inst-name" style="color:${inst.color}">${inst.shortName}</span>`;
-    label.addEventListener('click', () => previewInstrument(instId));
+    label.title = `${inst.shortName}: click to load sample, Shift+click to preview`;
+    label.addEventListener('click', async (e) => {
+      if (e.shiftKey) {
+        await previewInstrument(instId);
+        return;
+      }
+      await loadSampleForInstrument(instId);
+    });
     row.appendChild(label);
 
     // ── Waveform Display ──
@@ -239,18 +406,20 @@ engine.onStop = () => {
 
 playBtn.addEventListener('click', async () => {
   await initAudio();
-  if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
-  else { engine.start(); playBtn.classList.add('playing'); }
+  await initMIDI();
+  if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); }
+  else { engine.start(); playBtn.classList.add('playing'); sendMIDITransport(0xFA); }
 });
 
-stopBtn.addEventListener('click', () => { engine.stop(); playBtn.classList.remove('playing'); });
+stopBtn.addEventListener('click', () => { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); });
 
 document.addEventListener('keydown', async (e) => {
   if (e.code === 'Space' && !e.repeat) {
     e.preventDefault();
     await initAudio();
-    if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); }
-    else { engine.start(); playBtn.classList.add('playing'); }
+    await initMIDI();
+    if (engine.isPlaying) { engine.stop(); playBtn.classList.remove('playing'); sendMIDITransport(0xFC); }
+    else { engine.start(); playBtn.classList.add('playing'); sendMIDITransport(0xFA); }
   }
 
   // Number keys 1-8 for pattern bank
@@ -510,7 +679,8 @@ document.getElementById('btn-load-kit').addEventListener('click', async () => {
     for (const [instId, keys] of Object.entries(keywords)) {
       if (keys.some(k => lower.includes(k))) {
         const buf = file.buffer.buffer.slice(file.buffer.byteOffset, file.buffer.byteOffset + file.buffer.byteLength);
-        await engine.loadSample(instId, buf);
+        const loaded = await engine.loadSample(instId, buf);
+        if (loaded) setInstrumentSampleMeta(instId, file.name, file.path);
         break;
       }
     }
@@ -537,7 +707,7 @@ function buildSampleSlots() {
         drawWaveform(id);
         const nameEl = document.querySelector(`.wf-name[data-inst="${id}"]`);
         if (nameEl) nameEl.textContent = file.name;
-        engine.instruments[id]._sampleName = file.name;
+        setInstrumentSampleMeta(id, file.name, file.path);
         updateLCD(`${inst.shortName}: ${file.name}`);
       }
     });
@@ -547,23 +717,84 @@ function buildSampleSlots() {
 
 // ─── Save / Load / Clear ──────────────────────────────────────
 
-document.getElementById('btn-save').addEventListener('click', async () => {
+async function saveSessionToDisk(sessionData) {
   if (window.electronAPI) {
-    const saved = await window.electronAPI.savePattern(engine.serialize());
-    if (saved) updateLCD('PATTERN SAVED');
+    const saved = await window.electronAPI.savePattern(sessionData);
+    return !!saved;
+  }
+
+  // Browser fallback: download JSON
+  const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tr909-session-${ts}.909`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+  return true;
+}
+
+async function loadSessionFromDisk() {
+  if (window.electronAPI) {
+    return await window.electronAPI.loadPattern();
+  }
+
+  // Browser fallback: choose local JSON file
+  return await new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.909,.json,application/json';
+    input.onchange = async (e) => {
+      try {
+        const file = e.target.files?.[0];
+        if (!file) return resolve(null);
+        const text = await file.text();
+        resolve(JSON.parse(text));
+      } catch (err) {
+        console.error('[909] Failed to parse session file:', err);
+        resolve(null);
+      }
+    };
+    input.click();
+  });
+}
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  try {
+    const saved = await saveSessionToDisk(engine.serialize());
+    updateLCD(saved ? 'SESSION SAVED' : 'SAVE CANCELED');
+  } catch (err) {
+    console.error('[909] Save failed:', err);
+    updateLCD('SAVE FAILED');
   }
 });
 
 document.getElementById('btn-load').addEventListener('click', async () => {
-  if (window.electronAPI) {
-    const data = await window.electronAPI.loadPattern();
-    if (data) { engine.deserialize(data); refreshGrid(); refreshAllKnobs(); updateLCD('PATTERN LOADED'); }
+  try {
+    const data = await loadSessionFromDisk();
+    if (!data) {
+      updateLCD('LOAD CANCELED');
+      return;
+    }
+
+    engine.deserialize(data);
+    refreshGrid();
+    refreshAllKnobs();
+    refreshBankButtons();
+    const missing = await restoreSessionSamples(data);
+    updateLCD(missing.length > 0 ? `SESSION LOADED (missing: ${missing.join(', ')})` : 'SESSION LOADED');
+  } catch (err) {
+    console.error('[909] Load failed:', err);
+    updateLCD('LOAD FAILED');
   }
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
-  engine.clearPattern();
+  engine.clearAllPatterns();
   refreshGrid();
+  refreshAllKnobs();
   presetSelect.value = '';
   refreshBankButtons();
   updateLCD('ALL PATTERNS CLEARED');
@@ -580,6 +811,45 @@ async function previewInstrument(instId) {
 // ─── LCD ──────────────────────────────────────────────────────
 
 function updateLCD(text) { lcdDisplay.textContent = text; }
+
+function setInstrumentSampleMeta(instId, sampleName, samplePath = null) {
+  const inst = engine.instruments[instId];
+  if (!inst) return;
+  inst._sampleName = sampleName || null;
+  inst._samplePath = samplePath || null;
+  inst.sampleName = sampleName || null;
+  inst.samplePath = samplePath || null;
+}
+
+async function restoreSessionSamples(sessionData) {
+  if (!window.electronAPI || !sessionData || !sessionData.instruments) return [];
+
+  const failed = [];
+  for (const [instId, data] of Object.entries(sessionData.instruments)) {
+    if (!engine.instruments[instId]) continue;
+    if (!data || !data.samplePath) continue;
+
+    const file = await window.electronAPI.loadSamplePath(data.samplePath);
+    if (!file) {
+      failed.push(instId.toUpperCase());
+      continue;
+    }
+
+    const buf = file.buffer.buffer.slice(file.buffer.byteOffset, file.buffer.byteOffset + file.buffer.byteLength);
+    const success = await engine.loadSample(instId, buf);
+    if (!success) {
+      failed.push(instId.toUpperCase());
+      continue;
+    }
+
+    setInstrumentSampleMeta(instId, file.name, file.path);
+    const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
+    if (nameEl) nameEl.textContent = file.name;
+    drawWaveform(instId);
+  }
+
+  return failed;
+}
 
 // ─── Synthesized Fallback Samples ─────────────────────────────
 
@@ -790,7 +1060,7 @@ async function handleDroppedFile(instId, file) {
 
     if (success) {
       // Store the filename for display
-      inst._sampleName = file.name;
+      setInstrumentSampleMeta(instId, file.name, file.path || null);
 
       // Update waveform
       drawWaveform(instId);
@@ -825,7 +1095,7 @@ async function loadSampleForInstrument(instId) {
       const success = await engine.loadSample(instId, buf);
       if (success) {
         const inst = engine.instruments[instId];
-        inst._sampleName = file.name;
+        setInstrumentSampleMeta(instId, file.name, file.path || null);
         drawWaveform(instId);
         const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
         if (nameEl) nameEl.textContent = file.name;
@@ -1199,4 +1469,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateLCD('TR-909 v2  |  PRESS SPACE');
   refreshBankButtons();
+  initMIDI();
 });
