@@ -28,6 +28,15 @@ const delaySyncSelect = document.getElementById('delay-sync');
 const midiInIndicator = document.getElementById('midi-in-indicator');
 const midiOutIndicator = document.getElementById('midi-out-indicator');
 
+const waveEditorInstLabel = document.getElementById('wave-editor-inst');
+const waveEditorCanvas = document.getElementById('wave-editor-canvas');
+const waveEditorReadout = document.getElementById('wave-editor-readout');
+const hitThresholdSlider = document.getElementById('hit-threshold');
+const hitThresholdValue = document.getElementById('hit-threshold-value');
+
+let selectedInstrumentId = 'bd';
+let waveEditorDragHandle = null;
+
 // ─── MIDI Input (USB / USB‑C controllers) ─────────────────────
 
 const MIDI_NOTE_TO_INST = {
@@ -186,6 +195,202 @@ async function onMIDIMessage(event) {
   sendMIDINoteOut(instId, data2);
 }
 
+
+function getWaveEdit(instId) {
+  const inst = engine.instruments[instId];
+  if (!inst) return null;
+  if (!inst.waveEdit) {
+    inst.waveEdit = { start: 0, end: 1, threshold: 0.28, hitPoints: [] };
+  }
+  if (!Array.isArray(inst.waveEdit.hitPoints)) inst.waveEdit.hitPoints = [];
+  return inst.waveEdit;
+}
+
+function detectHitPoints(instId) {
+  const inst = engine.instruments[instId];
+  if (!inst || !inst.buffer) return [];
+  const waveEdit = getWaveEdit(instId);
+  const data = inst.buffer.getChannelData(0);
+  const startIdx = Math.floor(waveEdit.start * data.length);
+  const endIdx = Math.max(startIdx + 2, Math.floor(waveEdit.end * data.length));
+  const threshold = Math.max(0.02, Math.min(0.95, waveEdit.threshold || 0.28));
+
+  const hits = [];
+  let lastHit = -100000;
+  const minGap = Math.max(120, Math.floor(inst.buffer.sampleRate * 0.012));
+
+  for (let i = startIdx + 1; i < endIdx - 1; i++) {
+    const a = Math.abs(data[i]);
+    const prev = Math.abs(data[i - 1]);
+    const next = Math.abs(data[i + 1]);
+    if (a >= threshold && a >= prev && a > next && (i - lastHit) >= minGap) {
+      hits.push(i / data.length);
+      lastHit = i;
+      if (hits.length > 64) break;
+    }
+  }
+
+  waveEdit.hitPoints = hits;
+  return hits;
+}
+
+function setSelectedInstrument(instId) {
+  if (!engine.instruments[instId]) return;
+  selectedInstrumentId = instId;
+  document.querySelectorAll('.instrument-row').forEach((row) => {
+    row.classList.toggle('selected', row.dataset.inst === instId);
+  });
+  refreshWaveEditor();
+}
+
+function refreshWaveEditor() {
+  const inst = engine.instruments[selectedInstrumentId];
+  if (!inst || !waveEditorCanvas) return;
+
+  const waveEdit = getWaveEdit(selectedInstrumentId);
+  detectHitPoints(selectedInstrumentId);
+
+  waveEditorInstLabel.textContent = inst.shortName;
+  hitThresholdSlider.value = Math.round((waveEdit.threshold || 0.28) * 100);
+  hitThresholdValue.textContent = `${Math.round((waveEdit.threshold || 0.28) * 100)}%`;
+
+  const ctx = waveEditorCanvas.getContext('2d');
+  const w = waveEditorCanvas.width;
+  const h = waveEditorCanvas.height;
+
+  ctx.fillStyle = '#121812';
+  ctx.fillRect(0, 0, w, h);
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    const x = (w / 8) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2);
+  ctx.lineTo(w, h / 2);
+  ctx.stroke();
+
+  if (!inst.buffer) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '14px Share Tech Mono';
+    ctx.fillText('No sample loaded for this instrument', 18, h / 2 + 4);
+    waveEditorReadout.textContent = 'START 0.0% · END 100.0% · HITS 0';
+    return;
+  }
+
+  const data = inst.buffer.getChannelData(0);
+  const step = Math.ceil(data.length / w);
+
+  ctx.beginPath();
+  for (let i = 0; i < w; i++) {
+    let min = 1;
+    let max = -1;
+    const from = i * step;
+    const to = Math.min(data.length, from + step);
+    for (let j = from; j < to; j++) {
+      if (data[j] < min) min = data[j];
+      if (data[j] > max) max = data[j];
+    }
+    ctx.moveTo(i + 0.5, ((1 + min) * 0.5) * h);
+    ctx.lineTo(i + 0.5, ((1 + max) * 0.5) * h);
+  }
+  ctx.strokeStyle = 'rgba(90,195,255,0.9)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Active trim window
+  const startX = waveEdit.start * w;
+  const endX = waveEdit.end * w;
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(0, 0, startX, h);
+  ctx.fillRect(endX, 0, w - endX, h);
+
+  // Hit points
+  ctx.strokeStyle = 'rgba(255,200,60,0.9)';
+  ctx.lineWidth = 1;
+  for (const hp of waveEdit.hitPoints) {
+    const x = hp * w;
+    ctx.beginPath();
+    ctx.moveTo(x, h * 0.15);
+    ctx.lineTo(x, h * 0.85);
+    ctx.stroke();
+  }
+
+  function drawMarker(x, color, label) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x - 7, 0);
+    ctx.lineTo(x + 7, 0);
+    ctx.lineTo(x, 11);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = '11px Share Tech Mono';
+    ctx.fillText(label, Math.max(4, Math.min(w - 24, x + 8)), 14);
+  }
+
+  drawMarker(startX, 'rgba(80,210,120,0.98)', 'S');
+  drawMarker(endX, 'rgba(255,95,95,0.98)', 'E');
+
+  waveEditorReadout.textContent = `START ${(waveEdit.start * 100).toFixed(1)}% · END ${(waveEdit.end * 100).toFixed(1)}% · HITS ${waveEdit.hitPoints.length}`;
+}
+
+function setupWaveEditorInteraction() {
+  if (!waveEditorCanvas) return;
+
+  const getNormX = (event) => {
+    const rect = waveEditorCanvas.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  };
+
+  waveEditorCanvas.addEventListener('pointerdown', (event) => {
+    const waveEdit = getWaveEdit(selectedInstrumentId);
+    if (!waveEdit) return;
+    waveEditorCanvas.setPointerCapture(event.pointerId);
+    const x = getNormX(event);
+    const dStart = Math.abs(x - waveEdit.start);
+    const dEnd = Math.abs(x - waveEdit.end);
+    waveEditorDragHandle = dStart <= dEnd ? 'start' : 'end';
+  });
+
+  waveEditorCanvas.addEventListener('pointermove', (event) => {
+    if (!waveEditorDragHandle) return;
+    const waveEdit = getWaveEdit(selectedInstrumentId);
+    if (!waveEdit) return;
+    const x = getNormX(event);
+    if (waveEditorDragHandle === 'start') {
+      waveEdit.start = Math.max(0, Math.min(waveEdit.end - 0.01, x));
+    } else {
+      waveEdit.end = Math.max(waveEdit.start + 0.01, Math.min(1, x));
+    }
+    refreshWaveEditor();
+  });
+
+  const stopDrag = () => { waveEditorDragHandle = null; };
+  waveEditorCanvas.addEventListener('pointerup', stopDrag);
+  waveEditorCanvas.addEventListener('pointercancel', stopDrag);
+
+  hitThresholdSlider.addEventListener('input', () => {
+    const waveEdit = getWaveEdit(selectedInstrumentId);
+    if (!waveEdit) return;
+    waveEdit.threshold = Number(hitThresholdSlider.value) / 100;
+    refreshWaveEditor();
+  });
+}
+
 // ─── Build Instrument Grid ────────────────────────────────────
 
 function buildGrid() {
@@ -211,7 +416,8 @@ function buildGrid() {
         await previewInstrument(instId);
         return;
       }
-      await loadSampleForInstrument(instId);
+      setSelectedInstrument(instId);
+      if (e.metaKey || e.ctrlKey) await loadSampleForInstrument(instId);
     });
     row.appendChild(label);
 
@@ -235,8 +441,12 @@ function buildGrid() {
     wfName.dataset.inst = instId;
     wfContainer.appendChild(wfName);
 
-    // Click waveform to load sample via file picker
-    wfContainer.addEventListener('click', async (e) => {
+    wfContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setSelectedInstrument(instId);
+    });
+
+    wfContainer.addEventListener('dblclick', async (e) => {
       e.stopPropagation();
       await loadSampleForInstrument(instId);
     });
@@ -366,6 +576,8 @@ function buildGrid() {
 
     row.appendChild(stepsContainer);
 
+    row.addEventListener('click', () => setSelectedInstrument(instId));
+
     // ── Drag & Drop per row ──
     setupRowDragDrop(row, instId);
 
@@ -374,6 +586,7 @@ function buildGrid() {
 
   // Setup all mini knobs after DOM is built
   document.querySelectorAll('.mini-knob').forEach(setupMiniKnob);
+  setSelectedInstrument(selectedInstrumentId);
 }
 
 // ─── Step Highlight ───────────────────────────────────────────
@@ -688,6 +901,7 @@ document.getElementById('btn-load-kit').addEventListener('click', async () => {
   updateLCD(`KIT: ${files.length} SAMPLES`);
   buildSampleSlots();
   drawAllWaveforms();
+  refreshWaveEditor();
 });
 
 function buildSampleSlots() {
@@ -705,6 +919,7 @@ function buildSampleSlots() {
         await engine.loadSample(id, buf);
         buildSampleSlots();
         drawWaveform(id);
+        refreshWaveEditor();
         const nameEl = document.querySelector(`.wf-name[data-inst="${id}"]`);
         if (nameEl) nameEl.textContent = file.name;
         setInstrumentSampleMeta(id, file.name, file.path);
@@ -784,6 +999,7 @@ document.getElementById('btn-load').addEventListener('click', async () => {
     refreshAllKnobs();
     refreshBankButtons();
     const missing = await restoreSessionSamples(data);
+    refreshWaveEditor();
     updateLCD(missing.length > 0 ? `SESSION LOADED (missing: ${missing.join(', ')})` : 'SESSION LOADED');
   } catch (err) {
     console.error('[909] Load failed:', err);
@@ -880,7 +1096,7 @@ async function loadSynthesizedSamples() {
   updateLCD('SYNTH KIT + FX LOADED');
 
   // Draw waveforms for all loaded synth samples
-  setTimeout(() => drawAllWaveforms(), 50);
+  setTimeout(() => { drawAllWaveforms(); refreshWaveEditor(); }, 50);
 }
 
 // ─── Waveform Drawing ────────────────────────────────────────
@@ -1064,6 +1280,7 @@ async function handleDroppedFile(instId, file) {
 
       // Update waveform
       drawWaveform(instId);
+      refreshWaveEditor();
 
       // Update the name label
       const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
@@ -1097,6 +1314,7 @@ async function loadSampleForInstrument(instId) {
         const inst = engine.instruments[instId];
         setInstrumentSampleMeta(instId, file.name, file.path || null);
         drawWaveform(instId);
+        refreshWaveEditor();
         const nameEl = document.querySelector(`.wf-name[data-inst="${instId}"]`);
         if (nameEl) nameEl.textContent = file.name;
         updateLCD(`${inst.shortName}: ${file.name}`);
@@ -1467,7 +1685,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) setupKnob(el);
   });
 
+  setupWaveEditorInteraction();
   updateLCD('TR-909 v2  |  PRESS SPACE');
   refreshBankButtons();
+  refreshWaveEditor();
   initMIDI();
 });
