@@ -171,6 +171,12 @@ class SequencerEngine {
         delaySend: 0,         // 0-1
         muted: false,
         soloed: false,
+        waveEdit: {
+          start: 0,
+          end: 1,
+          threshold: 0.28,
+          hitPoints: []
+        },
       };
     }
     return instruments;
@@ -352,8 +358,20 @@ class SequencerEngine {
       ds.connect(this.delayNode);
     }
 
-    source.start(time);
-    if (instrument.decay < 1.8) source.stop(time + duration + 0.01);
+    const waveEdit = instrument.waveEdit || { start: 0, end: 1 };
+    const startNorm = Math.max(0, Math.min(0.999, Number.isFinite(waveEdit.start) ? waveEdit.start : 0));
+    const endNorm = Math.max(startNorm + 0.001, Math.min(1, Number.isFinite(waveEdit.end) ? waveEdit.end : 1));
+    const startOffset = instrument.buffer.duration * startNorm;
+    const endOffset = instrument.buffer.duration * endNorm;
+    const sliceDuration = Math.max(0.005, endOffset - startOffset);
+
+    source.start(time, startOffset);
+
+    if (instrument.decay < 1.8) {
+      source.stop(time + Math.min(duration + 0.01, sliceDuration + 0.01));
+    } else {
+      source.stop(time + sliceDuration + 0.01);
+    }
   }
 
   // ─── Pattern Bank Management ─────────────────────────────────
@@ -708,8 +726,20 @@ class SequencerEngine {
       ds.connect(delayNode);
     }
 
-    source.start(time);
-    if (instrument.decay < 1.8) source.stop(time + duration + 0.01);
+    const waveEdit = instrument.waveEdit || { start: 0, end: 1 };
+    const startNorm = Math.max(0, Math.min(0.999, Number.isFinite(waveEdit.start) ? waveEdit.start : 0));
+    const endNorm = Math.max(startNorm + 0.001, Math.min(1, Number.isFinite(waveEdit.end) ? waveEdit.end : 1));
+    const startOffset = instrument.buffer.duration * startNorm;
+    const endOffset = instrument.buffer.duration * endNorm;
+    const sliceDuration = Math.max(0.005, endOffset - startOffset);
+
+    source.start(time, startOffset);
+
+    if (instrument.decay < 1.8) {
+      source.stop(time + Math.min(duration + 0.01, sliceDuration + 0.01));
+    } else {
+      source.stop(time + sliceDuration + 0.01);
+    }
   }
 
   /** Generate reverb IR for a given context (offline or live) */
@@ -835,7 +865,7 @@ class SequencerEngine {
       instruments: {}
     };
     for (const [id, inst] of Object.entries(this.instruments)) {
-      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed, sampleName: inst.sampleName || inst._sampleName || null, samplePath: inst.samplePath || inst._samplePath || null };
+      data.instruments[id] = { pattern:[...inst.pattern], level:inst.level, tune:inst.tune, decay:inst.decay, pan:inst.pan, filterCutoff:inst.filterCutoff, filterRes:inst.filterRes, reverbSend:inst.reverbSend, delaySend:inst.delaySend, muted:inst.muted, soloed:inst.soloed, waveEdit: inst.waveEdit ? { ...inst.waveEdit, hitPoints: [...(inst.waveEdit.hitPoints || [])] } : null, sampleName: inst.sampleName || inst._sampleName || null, samplePath: inst.samplePath || inst._samplePath || null };
     }
     return data;
   }

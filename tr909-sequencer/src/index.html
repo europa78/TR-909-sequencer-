@@ -242,16 +242,36 @@
     </div>
   </div>
 
-  <!-- ─── Step Number Labels ──────────────────────────── -->
-  <div class="step-numbers">
-    <div class="step-group"><span class="step-num">1</span><span class="step-num">2</span><span class="step-num">3</span><span class="step-num">4</span></div>
-    <div class="step-group"><span class="step-num">5</span><span class="step-num">6</span><span class="step-num">7</span><span class="step-num">8</span></div>
-    <div class="step-group"><span class="step-num">9</span><span class="step-num">10</span><span class="step-num">11</span><span class="step-num">12</span></div>
-    <div class="step-group"><span class="step-num">13</span><span class="step-num">14</span><span class="step-num">15</span><span class="step-num">16</span></div>
-  </div>
+  <div class="sequencer-main">
+    <div class="sequencer-left">
+      <!-- ─── Step Number Labels ──────────────────────────── -->
+      <div class="step-numbers">
+        <div class="step-group"><span class="step-num">1</span><span class="step-num">2</span><span class="step-num">3</span><span class="step-num">4</span></div>
+        <div class="step-group"><span class="step-num">5</span><span class="step-num">6</span><span class="step-num">7</span><span class="step-num">8</span></div>
+        <div class="step-group"><span class="step-num">9</span><span class="step-num">10</span><span class="step-num">11</span><span class="step-num">12</span></div>
+        <div class="step-group"><span class="step-num">13</span><span class="step-num">14</span><span class="step-num">15</span><span class="step-num">16</span></div>
+      </div>
 
-  <!-- ─── Instrument Grid ─────────────────────────────── -->
-  <div class="instrument-grid" id="instrument-grid"></div>
+      <!-- ─── Instrument Grid ─────────────────────────────── -->
+      <div class="instrument-grid" id="instrument-grid"></div>
+    </div>
+
+    <aside class="wave-editor-panel" id="wave-editor-panel">
+      <div class="wave-editor-header">
+        <h3>WAVEFORM EDITOR</h3>
+        <span class="wave-editor-inst" id="wave-editor-inst">BD</span>
+      </div>
+      <div class="wave-editor-canvas-wrap" id="wave-editor-canvas-wrap">
+        <canvas id="wave-editor-canvas" width="460" height="260"></canvas>
+      </div>
+      <div class="wave-editor-readout" id="wave-editor-readout">START 0.0% · END 100.0% · HITS 0</div>
+      <div class="wave-editor-controls">
+        <label for="hit-threshold">Hit Threshold</label>
+        <input id="hit-threshold" type="range" min="2" max="95" value="28">
+        <div class="wave-editor-threshold" id="hit-threshold-value">28%</div>
+      </div>
+    </aside>
+  </div>
 
   <!-- ─── Footer ──────────────────────────────────────── -->
   <div class="footer">

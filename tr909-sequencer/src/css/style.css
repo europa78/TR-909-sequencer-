@@ -45,7 +45,7 @@ body {
   background: var(--chassis-bg);
   border-radius: 12px;
   padding: 18px 22px 22px;
-  width: 1320px;
+  width: 1720px;
   box-shadow: 0 0 0 2px var(--chassis-edge), 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
   position: relative;
 }
@@ -426,10 +426,112 @@ body {
 .step-btn.current::before { background: var(--led-on); box-shadow: 0 0 6px var(--led-on), 0 0 12px rgba(255,34,0,0.3); }
 
 /* Step numbers */
-.step-numbers { display: flex; gap: 2px; padding: 3px 0 0 320px; }
+.step-numbers { display: flex; gap: 2px; padding: 3px 0 0 320px; margin-bottom: 2px; }
 .step-numbers .step-group { display: flex; gap: 2px; }
 .step-numbers .step-group + .step-group { margin-left: 4px; }
 .step-num { width: 46px; text-align: center; font-size: 7px; color: var(--chassis-edge); font-family: 'Orbitron', sans-serif; }
+
+
+
+.sequencer-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sequencer-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.wave-editor-panel {
+  width: 500px;
+  min-height: 100%;
+  border: 2px solid var(--chassis-edge);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #c3bdb2 0%, #b7b1a5 100%);
+  padding: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.wave-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.wave-editor-header h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--label-dark);
+}
+
+.wave-editor-inst {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  color: #fff;
+  background: var(--panel-dark);
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.wave-editor-canvas-wrap {
+  border: 2px solid #232323;
+  border-radius: 6px;
+  background: #121812;
+  height: 260px;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#wave-editor-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wave-editor-readout {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--label-dark);
+  letter-spacing: 1px;
+}
+
+.wave-editor-controls {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.wave-editor-controls label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.wave-editor-controls input[type="range"] {
+  width: 100%;
+}
+
+.wave-editor-threshold {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  min-width: 36px;
+  text-align: right;
+}
+
+.instrument-row.selected {
+  box-shadow: inset 0 0 0 2px #222, 0 0 0 1px rgba(80,184,232,0.55);
+}
+
+.instrument-row.selected .inst-label {
+  background: #2f3432;
+}
 
 /* ─── Footer ───────────────────────────────────────────────── */
 
